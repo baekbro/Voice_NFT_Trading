@@ -12,7 +12,7 @@ import Progress from "../components/ui/Progress";
 import { useToast } from "../hooks/useToast";
 import { useAuth } from "../hooks/useAuth";
 import apiService from "../services/api";
-import MyAudioNFT from "../contracts/MyAudioNFT.json";
+import MyAudioNFT from "../constants/MyAudioNFT.json";
 import { uploadToPinata, uploadMetadataToPinata } from "../utils/pinata";
 import {
   Upload,

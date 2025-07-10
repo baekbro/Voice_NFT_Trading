@@ -15,7 +15,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { useToast } from "../../hooks/useToast";
 import apiService from "../../services/api";
 import Web3 from "web3";
-import MyAudioNFT from "../../contracts/MyAudioNFT.json";
+import MyAudioNFT from "../../constants/MyAudioNFT.json";
 const contractABI = MyAudioNFT.abi;
 const contractAddress = process.env.REACT_APP_CONTRACT_ADDRESS;
 const PageContainer = styled.div`
