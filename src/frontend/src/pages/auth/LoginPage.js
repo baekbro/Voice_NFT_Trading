@@ -403,25 +403,6 @@ function LoginPage() {
                 </SocialIcon>
               </SocialButton>
 
-              <SocialButton
-                className="google"
-                onClick={() => handleSocialLogin("google")}
-              >
-                <SocialIcon>
-                  <GoogleIcon />
-                  구글로 시작하기
-                </SocialIcon>
-              </SocialButton>
-
-              <SocialButton
-                className="naver"
-                onClick={() => handleSocialLogin("naver")}
-              >
-                <SocialIcon>
-                  <NaverIcon />
-                  네이버로 시작하기
-                </SocialIcon>
-              </SocialButton>
             </SocialOptions>
 
             <Footer>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import {
   Settings,
@@ -10,7 +10,9 @@ import {
   ExternalLink,
   Edit3,
   Check,
-  X
+  X,
+  Play,
+  Loader
 } from "lucide-react";
 import Button from "../../components/ui/Button";
 import { Card, CardContent } from "../../components/ui/Card";
@@ -372,13 +374,163 @@ const EmptyState = styled.div`
   }
 `;
 
+const NFTGrid = styled.div`
+  display: grid;
+  gap: 1.5rem;
+
+  @media (min-width: 768px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (min-width: 1024px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+`;
+
+const NFTCard = styled(Card)`
+  transition: all 0.3s ease-in-out;
+  border: none;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  background: white;
+
+  &:hover {
+    box-shadow: var(--shadow-xl);
+    transform: scale(1.05);
+  }
+`;
+
+const NFTImageContainer = styled.div`
+  position: relative;
+  aspect-ratio: 1;
+  background: linear-gradient(
+    to bottom right,
+    var(--emerald-100),
+    var(--teal-100)
+  );
+  overflow: hidden;
+
+  .bg-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to right,
+      rgba(52, 211, 153, 0.2),
+      rgba(45, 212, 191, 0.2)
+    );
+  }
+
+  .play-button {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .play-circle {
+      width: 5rem;
+      height: 5rem;
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-lg);
+      transition: transform 0.15s ease-in-out;
+
+      svg {
+        width: 2rem;
+        height: 2rem;
+        color: var(--emerald-600);
+      }
+    }
+  }
+
+  &:hover .play-circle {
+    transform: scale(1.1);
+  }
+`;
+
+const LikeButton = styled(Button)`
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: rgba(255, 255, 255, 0.8);
+
+  &:hover {
+    background: white;
+  }
+
+  svg {
+    width: 1rem;
+    height: 1rem;
+    color: ${(props) => (props.$liked ? "var(--rose-500)" : "var(--gray-600)")};
+    fill: ${(props) => (props.$liked ? "var(--rose-500)" : "none")};
+  }
+`;
+
+const NFTInfo = styled.div`
+  .nft-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .nft-details {
+    flex: 1;
+  }
+
+  .nft-title {
+    font-size: 1.125rem;
+    color: var(--gray-800);
+  }
+
+  .nft-creator {
+    color: var(--gray-600);
+  }
+
+  .nft-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .nft-price {
+    font-size: 1.125rem;
+    font-weight: bold;
+    color: var(--emerald-600);
+  }
+`;
+
 const ProfilePage = () => {
   const [activeTab, setActiveTab] = useState("created");
   const [isEditing, setIsEditing] = useState(false);
   const [editedBio, setEditedBio] = useState("");
   const [isUpdatingBio, setIsUpdatingBio] = useState(false);
-  const { user, setUser, isInitialized } = useAppContext();
+  const { user, setUser, isInitialized, mintedNFTs } = useAppContext();
+  const [marketNfts, setMarketNfts] = useState([]);
+  const [isMarketLoading, setIsMarketLoading] = useState(false);
   const { showSuccess, showError } = useToast();
+  
+  // 오디오 재생 상태 관리
+  const [playingId, setPlayingId] = useState(null);
+  const [loadingId, setLoadingId] = useState(null);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    if (isInitialized && (!mintedNFTs || mintedNFTs.length === 0)) {
+      setIsMarketLoading(true);
+      ApiService.nft.getList()
+        .then((res) => {
+          // getList may return { success, data } or just an array
+          if (Array.isArray(res)) setMarketNfts(res);
+          else if (res && Array.isArray(res.data)) setMarketNfts(res.data);
+          else setMarketNfts([]);
+        })
+        .catch(() => setMarketNfts([]))
+        .finally(() => setIsMarketLoading(false));
+    }
+  }, [isInitialized, mintedNFTs]);
 
   // AppContext에서 이미 프로필 정보를 로드하므로 별도 로딩 불필요
   // useEffect는 제거하고 AppContext의 user 정보를 그대로 사용
@@ -484,7 +636,7 @@ const ProfilePage = () => {
 
   // 통계 데이터 (실제 데이터로 대체 필요)
   const stats = {
-    created: 0, // 실제 생성한 NFT 수
+    created: mintedNFTs?.length || 0, // 실제 생성한 NFT 수
     collected: 0, // 실제 수집한 NFT 수
     sold: 0, // 실제 판매한 NFT 수
     earnings: "0 ETH", // 실제 수익
@@ -684,14 +836,44 @@ const ProfilePage = () => {
           </div>
 
           {activeTab === "created" && (
-            <EmptyState>
-              <div className="empty-icon">
-                <Plus />
+            mintedNFTs && mintedNFTs.length > 0 ? (
+              <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+                {mintedNFTs.map((nft) => (
+                  <Card key={nft._id || nft.tokenId}>
+                    <CardContent style={{ padding: '1.5rem' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.5rem' }}>{nft.title}</div>
+                      <div style={{ color: 'var(--gray-600)', marginBottom: '0.5rem' }}>{nft.description}</div>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--gray-500)', marginBottom: '0.5rem' }}>발행일: {nft.mint_date ? new Date(nft.mint_date).toLocaleDateString('ko-KR') : '-'}</div>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--gray-500)' }}>가격: {nft.price?.toString?.() || nft.price || 0} ETH</div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-              <h3>아직 생성한 NFT가 없습니다</h3>
-              <p>첫 번째 음성 NFT를 만들어보세요!</p>
-              <Button as="a" href="/create">NFT 생성하기</Button>
-            </EmptyState>
+            ) : isMarketLoading ? (
+              <div style={{ textAlign: 'center', padding: '2rem' }}>마켓플레이스 NFT를 불러오는 중...</div>
+            ) : marketNfts && marketNfts.length > 0 ? (
+              <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+                {marketNfts.map((nft) => (
+                  <Card key={nft._id || nft.tokenId}>
+                    <CardContent style={{ padding: '1.5rem' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.5rem' }}>{nft.title}</div>
+                      <div style={{ color: 'var(--gray-600)', marginBottom: '0.5rem' }}>{nft.description}</div>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--gray-500)', marginBottom: '0.5rem' }}>발행일: {nft.mint_date ? new Date(nft.mint_date).toLocaleDateString('ko-KR') : '-'}</div>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--gray-500)' }}>가격: {nft.price?.toString?.() || nft.price || 0} ETH</div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <EmptyState>
+                <div className="empty-icon">
+                  <Plus />
+                </div>
+                <h3>아직 생성한 NFT가 없습니다</h3>
+                <p>첫 번째 음성 NFT를 만들어보세요!</p>
+                <Button as="a" href="/create">NFT 생성하기</Button>
+              </EmptyState>
+            )
           )}
 
           {activeTab === "collected" && (

@@ -19,6 +19,7 @@ import {
   AudioWaveform,
   Mic,
 } from "lucide-react";
+import Progress from "../../components/ui/Progress";
 
 const PageContainer = styled.div`
   min-height: 100vh;
@@ -105,6 +106,7 @@ const VoiceItem = styled.div`
   background: ${(props) => (props.selected ? "#f0fdf4" : "white")};
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
 
   &:hover {
     border-color: #34d399;
@@ -137,6 +139,17 @@ const VoiceBadges = styled.div`
   display: flex;
   gap: 0.5rem;
   margin-top: 0.25rem;
+  align-items: center;
+`;
+
+const OwnedBadge = styled(Badge)`
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.625rem;
+  background: #10b981;
+  color: white;
+  border: none;
 `;
 
 const EmptyState = styled.div`
@@ -275,27 +288,28 @@ function TTSPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [ownedVoices, setOwnedVoices] = useState([]);
+  const [audioUrl, setAudioUrl] = useState("");
+  const [audioObj, setAudioObj] = useState(null);
+  const [audioGenerationProgress, setAudioGenerationProgress] = useState(0);
 
-  // 마켓플레이스에서 내 NFT 불러오기
+  // 마켓플레이스에서 모든 음성 NFT 불러오기
   useEffect(() => {
-    if (!walletAddress) return;
     apiService.nft.getList()
       .then((res) => {
         const nftList = res.nfts || res.data || res || [];
-        // 내 지갑주소와 일치하는 NFT만 필터링
-        const myNfts = nftList.filter(
-          (nft) => nft.walletAddress?.toLowerCase() === walletAddress.toLowerCase()
-        );
+        // 음성 관련 NFT만 필터링 (audioCID가 있는 것들)
+        const voiceNfts = nftList.filter((nft) => nft.audioCID);
         // ownedVoices 포맷 맞추기
         setOwnedVoices(
-          myNfts.map((nft) => ({
+          voiceNfts.map((nft) => ({
             id: nft._id || nft.id,
             title: nft.title,
             creator: nft.creator || `@${nft.walletAddress?.slice(0, 8)}...`,
             type: nft.tags?.[0] || "음성 NFT",
             language: nft.language || "한국어",
-            image: nft.imageUrl ? nft.imageUrl : (nft.imageCID ? `https://gateway.pinata.cloud/ipfs/${nft.imageCID}` : "/placeholder-user.jpg"),
+            image: nft.imageUrl,
             audioCID: nft.audioCID,
+            isOwned: nft.walletAddress?.toLowerCase() === walletAddress?.toLowerCase(),
           }))
         );
       })
@@ -308,24 +322,51 @@ function TTSPage() {
       return;
     }
     setIsGenerating(true);
+    setAudioUrl("");
+    setAudioObj(null);
+    setAudioGenerationProgress(0);
+    let progressInterval;
     try {
-      // 실제 TTS 생성 API 호출 (audioCID 등 전달)
-      const selectedNft = ownedVoices.find((v) => v.id === selectedVoice);
-      const ttsPromise = apiService.tts.generateSpeech(
-        selectedNft.audioCID || selectedVoice,
-        inputText
+      // CreatePage와 동일하게 userId 추출
+      let userId = "temp_user";
+      const token = localStorage.getItem("authToken");
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          userId = payload.id || payload.kakaoId || payload._id || "temp_user";
+        } catch (e) {}
+      }
+      // 진행률 시뮬레이션 (초반 빠르게, 후반 천천히)
+      progressInterval = setInterval(() => {
+        setAudioGenerationProgress((prev) => {
+          if (prev >= 85) {
+            clearInterval(progressInterval);
+            return 85;
+          }
+          const increment = prev < 30 ? 8 : prev < 60 ? 5 : 3;
+          return prev + increment;
+        });
+      }, 300);
+      const ttsResult = await showPromise(
+        apiService.tts.generateSpeechBlob(userId, inputText),
+        {
+          loading: "AI가 음성을 생성하고 있습니다...",
+          success: "음성이 성공적으로 생성되었습니다!",
+          error: "음성 생성에 실패했습니다. 다시 시도해주세요.",
+        }
       );
-      const result = await showPromise(ttsPromise, {
-        loading: "AI가 음성을 생성하고 있습니다...",
-        success: "음성이 성공적으로 생성되었습니다!",
-        error: "음성 생성에 실패했습니다. 다시 시도해주세요.",
-      });
-      if (result instanceof Blob) {
-        const audioUrl = URL.createObjectURL(result);
-        console.log("Generated audio URL:", audioUrl);
-        // 오디오 플레이어에 URL 설정 (추가 구현 필요)
+      clearInterval(progressInterval);
+      setAudioGenerationProgress(100);
+      if (ttsResult && ttsResult.blob) {
+        const url = URL.createObjectURL(ttsResult.blob);
+        setAudioUrl(url);
+        setAudioObj(new Audio(url));
+      } else {
+        showError("음성 생성 결과가 올바르지 않습니다.");
       }
     } catch (error) {
+      clearInterval(progressInterval);
+      setAudioGenerationProgress(0);
       console.error("TTS generation failed:", error);
     } finally {
       setIsGenerating(false);
@@ -333,11 +374,33 @@ function TTSPage() {
   };
 
   const handlePlay = () => {
-    setIsPlaying(!isPlaying);
+    if (!audioUrl) return;
+    if (!audioObj) {
+      const newAudio = new Audio(audioUrl);
+      setAudioObj(newAudio);
+      newAudio.play();
+      setIsPlaying(true);
+      newAudio.onended = () => setIsPlaying(false);
+    } else {
+      if (isPlaying) {
+        audioObj.pause();
+        setIsPlaying(false);
+      } else {
+        audioObj.play();
+        setIsPlaying(true);
+        audioObj.onended = () => setIsPlaying(false);
+      }
+    }
   };
 
   const handleDownload = () => {
-    console.log("Downloading audio...");
+    if (!audioUrl) return;
+    const a = document.createElement("a");
+    a.href = audioUrl;
+    a.download = "generated_tts.wav";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     showSuccess("음성 파일 다운로드가 시작되었습니다.");
   };
 
@@ -358,10 +421,10 @@ function TTSPage() {
             <StyledCard>
               <CardHeader>
                 <CardTitle>
-                  <Mic size={20} />내 음성 NFT
+                  <Mic size={20} />마켓플레이스 음성 NFT
                 </CardTitle>
                 <CardDescription>
-                  소유한 음성 중 하나를 선택하세요
+                  사용할 음성을 선택하세요
                 </CardDescription>
               </CardHeader>
               <CardContent style={{ padding: "0 1.5rem 1.5rem" }}>
@@ -378,9 +441,12 @@ function TTSPage() {
                       selected={selectedVoice === voice.id}
                       onClick={() => setSelectedVoice(voice.id)}
                     >
+                      {voice.isOwned && (
+                        <OwnedBadge>내 소유</OwnedBadge>
+                      )}
                       <VoiceContent>
                         <Avatar style={{ width: "3rem", height: "3rem" }}>
-                          <AvatarImage src={voice.image} alt={voice.creator} />
+                          <AvatarImage src={voice.image || "/placeholder-user.jpg"} alt={voice.creator} />
                           <AvatarFallback>
                             {voice.creator.replace("@", "").charAt(0)}
                           </AvatarFallback>
@@ -410,9 +476,9 @@ function TTSPage() {
                   {ownedVoices.length === 0 && (
                     <EmptyState>
                       <AudioWaveform />
-                      <p>소유한 음성 NFT가 없습니다</p>
+                      <p>사용 가능한 음성 NFT가 없습니다</p>
                       <Button variant="outline" size="sm">
-                        마켓플레이스에서 구매하기
+                        마켓플레이스에서 확인하기
                       </Button>
                     </EmptyState>
                   )}
@@ -479,7 +545,16 @@ function TTSPage() {
                 </GenerateButton>
 
                 {/* Generated Audio Player */}
-                {!isGenerating && inputText && selectedVoice && (
+                {isGenerating && (
+                  <div style={{ margin: "1.5rem 0" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <AudioWaveform size={20} />
+                      <span style={{ fontWeight: 500 }}>음성 생성 중... {audioGenerationProgress}%</span>
+                    </div>
+                    <Progress value={audioGenerationProgress} style={{ marginTop: 8 }} />
+                  </div>
+                )}
+                {!isGenerating && audioUrl && (
                   <AudioPlayer>
                     <CardContent style={{ padding: "1.5rem" }}>
                       <PlayerHeader>
@@ -502,6 +577,7 @@ function TTSPage() {
                           variant="outline"
                           size="sm"
                           onClick={handlePlay}
+                          disabled={!audioUrl}
                           style={{
                             borderColor: "#bbf7d0",
                             color: "#059669",
@@ -510,10 +586,9 @@ function TTSPage() {
                         >
                           {isPlaying ? <Pause size={16} /> : <Play size={16} />}
                         </Button>
-                        <ProgressBar>
-                          <ProgressFill />
-                        </ProgressBar>
-                        <TimeDisplay>0:15 / 0:45</TimeDisplay>
+                        {/* ProgressBar 대체: 실제 오디오 길이로 구현하려면 추가 작업 필요 */}
+                        <div style={{ flex: 1 }} />
+                        <TimeDisplay> </TimeDisplay>
                       </PlayerControls>
 
                       <PlayerActions>
@@ -521,6 +596,7 @@ function TTSPage() {
                           variant="outline"
                           size="sm"
                           onClick={handleDownload}
+                          disabled={!audioUrl}
                           style={{
                             borderColor: "#bbf7d0",
                             color: "#059669",
@@ -565,6 +641,7 @@ function TTSPage() {
                       • 긴 텍스트는 문단별로 나누어 생성하는 것을 권장합니다
                     </li>
                     <li>• 생성된 음성은 상업적 용도로도 사용 가능합니다</li>
+                    <li>• 마켓플레이스의 모든 음성 NFT를 TTS에 활용할 수 있습니다</li>
                   </TipList>
                 </TipCard>
               </CardContent>

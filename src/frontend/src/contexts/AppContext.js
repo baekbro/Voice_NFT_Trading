@@ -26,6 +26,8 @@ export const AppProvider = ({ children }) => {
   const [nfts, setNfts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [mintedNFTs, setMintedNFTs] = useState([]);
+  const [purchasedNFTs, setPurchasedNFTs] = useState([]);
 
   // React 19: useOptimistic으로 낙관적 업데이트
   const [optimisticNfts, addOptimisticNft] = useOptimistic(
@@ -45,20 +47,28 @@ export const AppProvider = ({ children }) => {
           const userProfile = await apiService.auth.getProfile();
           console.log("AppContext - 사용자 프로필 로드:", userProfile);
           
-          // 응답 구조에 따라 사용자 정보 설정
+          // 응답 구조에 따라 사용자 정보 및 NFT 목록 설정
           if (userProfile && userProfile.user) {
             setUser(userProfile.user);
+            setMintedNFTs(userProfile.mintedNFTs || []);
+            setPurchasedNFTs(userProfile.purchasedNFTs || []);
           } else if (userProfile && userProfile.success && userProfile.user) {
             setUser(userProfile.user);
+            setMintedNFTs(userProfile.mintedNFTs || []);
+            setPurchasedNFTs(userProfile.purchasedNFTs || []);
           } else {
             console.warn("사용자 정보 구조가 예상과 다름:", userProfile);
             setUser(userProfile); // fallback
+            setMintedNFTs([]);
+            setPurchasedNFTs([]);
           }
         } catch (error) {
           console.error("사용자 정보 로드 실패:", error);
           // 토큰이 유효하지 않은 경우 제거
           apiService.removeToken();
           setUser(null);
+          setMintedNFTs([]);
+          setPurchasedNFTs([]);
         }
       }
       setIsInitialized(true);
@@ -128,6 +138,8 @@ export const AppProvider = ({ children }) => {
     // 상태
     user,
     nfts: optimisticNfts, // 낙관적 업데이트된 NFT 목록
+    mintedNFTs,
+    purchasedNFTs,
     isLoading: isLoading || isPending,
     isPending,
     isInitialized,
@@ -139,6 +151,8 @@ export const AppProvider = ({ children }) => {
     logoutAction,
     setUser,
     setNfts,
+    setMintedNFTs,
+    setPurchasedNFTs,
   };
 
   // React 19: Context를 직접 Provider로 사용
