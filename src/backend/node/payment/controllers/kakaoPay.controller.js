@@ -8,26 +8,43 @@ const ReadyPayment = require('../models/ready_payment.model');
 exports.kakaoPayReady = async (req, res) => {
     try {
         const { item_name, quantity, total_amount, tokenId, sellerWallet } = req.body;
-
-        const result = await requestKakaoPayReady({ item_name, quantity, total_amount });
-
+        console.log('🔍 KakaoPay Ready 요청:', req.body);
+        // 숫자들을 문자열로 변환해서 전달
+        const result = await requestKakaoPayReady({
+            item_name: item_name || 'NFT 결제',
+            quantity: String(quantity),
+            total_amount: String(total_amount*100)
+        });
+        
+        
         // 💾 DB에 tid-tokenId-sellerWallet-price 저장
         await ReadyPayment.create({
             tid: result.tid,
             tokenId,
             sellerWallet,
-            price: total_amount
+            price,
         });
-
+        console.log('✅ KakaoPay Ready 응답:', result);
         res.json({
             next_redirect_pc_url: result.next_redirect_pc_url,
             tid: result.tid
         });
+        console.log(next_redirect_pc_url)
+        
     } catch (error) {
-        console.error('❌ KakaoPay Ready Error:', error.message);
-        res.status(500).json({ error: '결제 준비 실패' });
+        if (error.response) {
+            // 카카오에서 응답 자체는 왔지만 오류인 경우
+            console.error('❌ KakaoPay Ready Response Error:', error.response.data);
+            return res.status(500).json({ error: error.response.data });
+        } else {
+            // 네트워크 오류, 코드 오류 등
+            console.error('❌ KakaoPay Ready Unknown Error:', error.message);
+            return res.status(500).json({ error: '결제 준비 실패' });
+        }
     }
 };
+
+
 
 exports.kakaoPayApprove = async (req, res) => {
     try {

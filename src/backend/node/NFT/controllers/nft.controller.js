@@ -35,23 +35,24 @@ exports.mintNFT = (req, res) => {
 // NFT 정보 DB 저장
 exports.saveNFT = async (req, res) => {
   try {
-    const { tokenId, title, description, tags, price, walletAddress, imageCID } = req.body;
+    const { title, description, tags, price, walletAddress, imageCID, audioCID, audioFilename } = req.body;
 
-    if (!tokenId || !title || !price) {
+    if (!title || !price) {
       return res
         .status(400)
-        .json({ error: "필수 필드 누락(tokenId, title, price)" });
+        .json({ error: "필수 필드 누락(title, price)" });
     }
 
     const newNFT = new VoiceNFT({
-      tokenId,
       title,
       description,
       tags,
       price,
       mint_date: new Date(),
       walletAddress,
-      imageCID: imageCID
+      imageCID: imageCID,
+      audioCID: audioCID,
+      audioFilename: audioFilename || 'unknown'
     });
 
     await newNFT.save();
@@ -84,14 +85,14 @@ exports.getNFTList = async (req, res) => {
   }
 };
 
-exports.getNFTByTokenId = async (req, res) => {
-  const { tokenId } = req.params;
+exports.getNFTById = async (req, res) => {
+  const { id } = req.params;
 
   try {
-    const nft = await VoiceNFT.findOne({ tokenId });
+    const nft = await VoiceNFT.findById(id);
 
     if (!nft) {
-      return res.status(404).json({ message: '해당 Token ID의 NFT가 존재하지 않습니다.' });
+      return res.status(404).json({ message: '해당 ID의 NFT가 존재하지 않습니다.' });
     }
 
     // Decimal128 타입의 price를 숫자로 변환

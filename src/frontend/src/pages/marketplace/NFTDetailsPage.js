@@ -21,6 +21,15 @@ const PageContainer = styled.div`
     var(--white),
     var(--teal-50)
   );
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
 `;
 
 const Container = styled.div`
@@ -143,6 +152,7 @@ const NFTDetailsPage = () => {
   const [nft, setNft] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   
   // 중복 실행 방지를 위한 ref
@@ -241,7 +251,7 @@ const NFTDetailsPage = () => {
         item_name: nft.title || "Voice NFT",
         quantity: 1,
         total_amount: nft.price,
-        tokenId: nft.tokenId,
+        tokenId: nft._id,
         sellerWallet: nft.walletAddress,
       };
       const readyRes = await apiService.kakaopay.ready(readyData);
@@ -260,22 +270,89 @@ const NFTDetailsPage = () => {
     }
   };
 
-  // 음성 재생/정지
-  const handlePlayAudio = () => {
-    if (nft?.audioUrl) {
-      setIsPlaying(!isPlaying);
-      // 실제 오디오 재생 로직은 여기에 구현
-      // 예: new Audio(nft.audioUrl).play()
+  // 오디오 URL 생성 함수
+  const getAudioUrl = () => {
+    if (nft?.audioUrl) return nft.audioUrl;
+    if (nft?.audioCID) return `https://gateway.pinata.cloud/ipfs/${nft.audioCID}`;
+    return null;
+  };
 
-      if (!isPlaying) {
+  // TTS 생성된 음성 URL 가져오기
+  const getTTSAudioUrl = async () => {
+    if (!nft?.walletAddress) return null;
+    
+    try {
+      // 사용자의 생성된 음성 파일 목록 가져오기
+      const response = await apiService.tts.getGeneratedVoices(nft.walletAddress);
+      const voices = response.voices || [];
+      
+      // 가장 최근 생성된 음성 파일 반환
+      if (voices.length > 0) {
+        const latestVoice = voices[0]; // 이미 최신순으로 정렬되어 있음
+        return latestVoice;
+      }
+      return null;
+    } catch (error) {
+      console.error("TTS 음성 목록 가져오기 실패:", error);
+      return null;
+    }
+  };
+
+  // 음성 재생/정지
+  const handlePlayAudio = async () => {
+    try {
+      // 이미 재생 중이면 정지
+      if (isPlaying) {
+        setIsPlaying(false);
+        return;
+      }
+
+      // 1. 먼저 IPFS에서 오디오 시도
+      const audioUrl = getAudioUrl();
+      if (audioUrl) {
+        setIsPlaying(true);
         showSuccess("음성 재생을 시작합니다.");
-        // 임시로 3초 후 정지
+        const audio = new Audio(audioUrl);
+        audio.play();
+        audio.onended = () => {
+          setIsPlaying(false);
+        };
+        // 3초 후 강제 정지
         setTimeout(() => {
           setIsPlaying(false);
+          audio.pause();
+          audio.currentTime = 0;
         }, 3000);
+        return;
       }
-    } else {
-      showError("음성 파일을 찾을 수 없습니다.");
+
+      // 2. IPFS 오디오가 없으면 TTS 생성된 음성 파일 시도
+      setIsLoadingAudio(true);
+      const ttsAudioUrl = await getTTSAudioUrl();
+      setIsLoadingAudio(false);
+      
+      if (ttsAudioUrl) {
+        setIsPlaying(true);
+        showSuccess("TTS 음성 재생을 시작합니다.");
+        const audio = new Audio(ttsAudioUrl);
+        audio.play();
+        audio.onended = () => {
+          setIsPlaying(false);
+        };
+        // 3초 후 강제 정지
+        setTimeout(() => {
+          setIsPlaying(false);
+          audio.pause();
+          audio.currentTime = 0;
+        }, 3000);
+      } else {
+        showError("재생할 수 있는 음성 파일이 없습니다.");
+      }
+    } catch (error) {
+      console.error("음성 재생 오류:", error);
+      setIsPlaying(false);
+      setIsLoadingAudio(false);
+      showError("음성 재생에 실패했습니다.");
     }
   };
 
@@ -372,12 +449,12 @@ const NFTDetailsPage = () => {
         <NFTGrid>
           <div>
             <NFTImage>
-              {(nft.imageUrl || nft.image) && (
+              {(nft.imageUrl || nft.imageCID) && (
                 <img
                   src={
                     nft.imageUrl
                       ? nft.imageUrl
-                      : `https://gateway.pinata.cloud/ipfs/${nft.image}`
+                      : `https://gateway.pinata.cloud/ipfs/${nft.imageCID}`
                   }
                   alt={nft.title}
                   style={{
@@ -395,15 +472,26 @@ const NFTDetailsPage = () => {
                 style={{
                   position: "relative",
                   zIndex: 1,
-                  backgroundColor: isPlaying ? "var(--emerald-600)" : "white",
+                  backgroundColor: isPlaying ? "var(--emerald-600)" : 
+                                   isLoadingAudio ? "var(--amber-500)" : "white",
                 }}
               >
-                <Play
-                  style={{
-                    color: isPlaying ? "white" : "var(--emerald-600)",
-                    transform: isPlaying ? "scale(1.2)" : "scale(1)",
-                  }}
-                />
+                {isLoadingAudio ? (
+                  <Loader
+                    size={24}
+                    style={{
+                      color: "white",
+                      animation: "spin 1s linear infinite",
+                    }}
+                  />
+                ) : (
+                  <Play
+                    style={{
+                      color: isPlaying ? "white" : "var(--emerald-600)",
+                      transform: isPlaying ? "scale(1.2)" : "scale(1)",
+                    }}
+                  />
+                )}
               </div>
             </NFTImage>
           </div>
@@ -457,10 +545,7 @@ const NFTDetailsPage = () => {
             </div>
 
             <div className="nft-stats">
-              <div className="stat-item">
-                <div className="label">토큰 ID</div>
-                <div className="value">{nft.tokenId}</div>
-              </div>
+              {/* 토큰 ID 항목 제거 */}
               <div className="stat-item">
                 <div className="label">체인</div>
                 <div className="value">{nft.blockchain || "Ethereum"}</div>
@@ -476,8 +561,8 @@ const NFTDetailsPage = () => {
               <div className="stat-item">
                 <div className="label">소유자</div>
                 <div className="value">
-                  {nft.ownerAddress
-                    ? `${nft.ownerAddress.slice(0, 8)}...`
+                  {nft.walletAddress
+                    ? `${nft.walletAddress.slice(0, 8)}...`
                     : "정보 없음"}
                 </div>
               </div>

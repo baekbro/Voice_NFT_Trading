@@ -42,7 +42,7 @@ const voiceListController = require("../controllers/voiceList.controller");
 router.post("/mint", nftController.mintNFT);
 router.post("/save", nftController.saveNFT);
 router.get("/voiceList", voiceListController.getNFTs);
-router.get("/voiceList/:tokenId", nftController.getNFTByTokenId);
+router.get("/voiceList/:id", nftController.getNFTById);
 /**
  * @swagger
  * /api/nft/save:
@@ -58,9 +58,6 @@ router.get("/voiceList/:tokenId", nftController.getNFTByTokenId);
  *           schema:
  *             type: object
  *             properties:
- *               tokenId:
- *                 type: string
- *                 example: "1"
  *               title:
  *                 type: string
  *                 example: "My NFT Title"
@@ -98,10 +95,8 @@ router.get("/voiceList/:tokenId", nftController.getNFTByTokenId);
  *                   example: "DB 저장 중 오류 발생"
  *                 details:
  *                   type: string
- *                   example: "SequelizeValidationError: title cannot be null"
+ *                   example: "ValidationError: title cannot be null"
  */
-router.post("/save", nftController.saveNFT);
-
 /**
  * @swagger
  * /api/nft/voiceList:
@@ -159,19 +154,19 @@ router.get("/voiceList", voiceListController.getNFTs);
 
 /**
  * @swagger
- * /api/nft/voiceList/{tokenId}:
+ * /api/nft/voiceList/{id}:
  *   get:
  *     summary: 특정 Voice NFT 상세 조회
  *     tags:
  *       - VoiceNFT
- *     description: tokenId를 기반으로 특정 Voice NFT의 상세 정보를 반환합니다.
+ *     description: ID를 기반으로 특정 Voice NFT의 상세 정보를 반환합니다.
  *     parameters:
  *       - in: path
- *         name: tokenId
+ *         name: id
  *         required: true
  *         schema:
  *           type: string
- *         description: 조회할 NFT의 Token ID
+ *         description: 조회할 NFT의 ID
  *     responses:
  *       200:
  *         description: 조회 성공
@@ -202,6 +197,6 @@ router.get("/voiceList", voiceListController.getNFTs);
  *                 details:
  *                   type: string
  */
-router.get("/voiceList/:tokenId", nftController.getNFTByTokenId);
+router.get("/voiceList/:id", nftController.getNFTById);
 // 반드시 export 해줘야 외부에서 사용 가능
 module.exports = router;

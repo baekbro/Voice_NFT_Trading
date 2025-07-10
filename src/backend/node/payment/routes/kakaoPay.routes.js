@@ -4,7 +4,7 @@ const kakaoPayController = require('../controllers/kakaoPay.controller');
 
 /**
  * @swagger
- * /api/kakaopay/ready:
+ * /api/payment/ready:
  *   post:
  *     summary: 카카오페이 결제 준비 요청
  *     tags:
@@ -53,7 +53,7 @@ router.post("/ready", kakaoPayController.kakaoPayReady);
 
 /**
  * @swagger
- * /api/kakaopay/approve:
+ * /api/payment/approve:
  *   post:
  *     summary: 카카오페이 결제 승인 및 거래 기록 저장
  *     tags: [KakaoPay]

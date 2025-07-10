@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import Button from "../../components/ui/Button";
 import { Card, CardContent } from "../../components/ui/Card";
@@ -267,65 +267,63 @@ const TipList = styled.ul`
 function TTSPage() {
   const { showPromise, showSuccess, showError } = useToast();
 
+  // 실제 로그인/연결된 지갑 주소 가져오기 (예시)
+  const walletAddress = localStorage.getItem("walletAddress");
+
   const [selectedVoice, setSelectedVoice] = useState("");
   const [inputText, setInputText] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [ownedVoices, setOwnedVoices] = useState([]);
 
-  // 사용자가 소유한 음성 NFT들
-  const ownedVoices = [
-    {
-      id: "1",
-      title: "김민수의 따뜻한 목소리",
-      creator: "@김민수",
-      type: "남성",
-      language: "한국어",
-      image: "/placeholder-user.jpg",
-    },
-    {
-      id: "2",
-      title: "이지은의 부드러운 음성",
-      creator: "@이지은",
-      type: "여성",
-      language: "한국어",
-      image: "/placeholder-user.jpg",
-    },
-    {
-      id: "3",
-      title: "Professional Narrator Voice",
-      creator: "@VoicePro",
-      type: "남성",
-      language: "영어",
-      image: "/placeholder-user.jpg",
-    },
-  ];
+  // 마켓플레이스에서 내 NFT 불러오기
+  useEffect(() => {
+    if (!walletAddress) return;
+    apiService.nft.getList()
+      .then((res) => {
+        const nftList = res.nfts || res.data || res || [];
+        // 내 지갑주소와 일치하는 NFT만 필터링
+        const myNfts = nftList.filter(
+          (nft) => nft.walletAddress?.toLowerCase() === walletAddress.toLowerCase()
+        );
+        // ownedVoices 포맷 맞추기
+        setOwnedVoices(
+          myNfts.map((nft) => ({
+            id: nft._id || nft.id,
+            title: nft.title,
+            creator: nft.creator || `@${nft.walletAddress?.slice(0, 8)}...`,
+            type: nft.tags?.[0] || "음성 NFT",
+            language: nft.language || "한국어",
+            image: nft.imageUrl ? nft.imageUrl : (nft.imageCID ? `https://gateway.pinata.cloud/ipfs/${nft.imageCID}` : "/placeholder-user.jpg"),
+            audioCID: nft.audioCID,
+          }))
+        );
+      })
+      .catch(() => setOwnedVoices([]));
+  }, [walletAddress]);
 
   const handleGenerate = async () => {
     if (!selectedVoice || !inputText.trim()) {
       showError("음성과 텍스트를 모두 선택해주세요.");
       return;
     }
-
     setIsGenerating(true);
-
     try {
-      // 실제 TTS 생성 API 호출
+      // 실제 TTS 생성 API 호출 (audioCID 등 전달)
+      const selectedNft = ownedVoices.find((v) => v.id === selectedVoice);
       const ttsPromise = apiService.tts.generateSpeech(
-        selectedVoice,
+        selectedNft.audioCID || selectedVoice,
         inputText
       );
-
       const result = await showPromise(ttsPromise, {
         loading: "AI가 음성을 생성하고 있습니다...",
         success: "음성이 성공적으로 생성되었습니다!",
         error: "음성 생성에 실패했습니다. 다시 시도해주세요.",
       });
-
-      // 생성된 음성 파일 처리
       if (result instanceof Blob) {
         const audioUrl = URL.createObjectURL(result);
         console.log("Generated audio URL:", audioUrl);
-        // 여기서 오디오 플레이어에 URL 설정
+        // 오디오 플레이어에 URL 설정 (추가 구현 필요)
       }
     } catch (error) {
       console.error("TTS generation failed:", error);

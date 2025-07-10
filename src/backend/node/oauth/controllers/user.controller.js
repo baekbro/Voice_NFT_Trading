@@ -30,8 +30,8 @@ exports.getProfile = async (req, res) => {
         const mintedNFTs = await VoiceNFT.find({ walletAddress: user.walletAddress }).sort({ mint_date: -1 });
 
         const purchasedTrades = await VoiceNFTTrade.find({ buyerWallet: user.walletAddress });
-        const purchasedTokenIds = purchasedTrades.map(t => t.tokenId);
-        const purchasedNFTs = await VoiceNFT.find({ tokenId: { $in: purchasedTokenIds } });
+            const purchasedTokenIds = purchasedTrades.map(t => t.tokenId);
+    const purchasedNFTs = await VoiceNFT.find({ _id: { $in: purchasedTokenIds } });
 
         console.log('✅ 사용자 조회 성공:', { id: user._id, nickname: user.nickname });
         res.json({

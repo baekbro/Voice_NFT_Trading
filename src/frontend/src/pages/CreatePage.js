@@ -503,6 +503,8 @@ function CreatePage() {
   const [contract, setContract] = useState(null);
   const [mintingStatus, setMintingStatus] = useState('');
   const [isMinting, setIsMinting] = useState(false);
+  const [generatedAudioFilename, setGeneratedAudioFilename] = useState('');
+  const [generatedAudioBlob, setGeneratedAudioBlob] = useState(null);
   // mintingMode 상태 제거
 
   const sampleTexts = [
@@ -670,13 +672,19 @@ function CreatePage() {
       }, 300);
 
       // Use apiService.tts.generateSpeechBlob instead of direct fetch
-      const audioBlob = await apiService.tts.generateSpeechBlob(userId, text);
+      const audioResult = await apiService.tts.generateSpeechBlob(userId, text);
       
       // 완료 시 100%로 설정
       clearInterval(progressInterval);
       setAudioGenerationProgress(100);
       
-      const audioUrl = URL.createObjectURL(audioBlob);
+      // 파일명과 Blob을 상태에 저장 (NFT 민팅 시 사용)
+      if (audioResult.filename) {
+        setGeneratedAudioFilename(audioResult.filename);
+      }
+      setGeneratedAudioBlob(audioResult.blob);
+      
+      const audioUrl = URL.createObjectURL(audioResult.blob);
       const audio = new Audio(audioUrl);
       audio.play();
 
@@ -698,7 +706,10 @@ function CreatePage() {
   };
 
   const handleMintNFT = async () => {
-    if (!audioFile) {
+    // 생성된 오디오 파일이 있으면 그것을 사용, 없으면 업로드된 파일 사용
+    const audioToUse = generatedAudioBlob || audioFile;
+    
+    if (!audioToUse) {
       showError("오디오 파일이 필요합니다.");
       return;
     }
@@ -719,7 +730,15 @@ function CreatePage() {
       const imageCID = await uploadToPinata(formData.image);
 
       setMintingStatus('🎧 오디오 업로드 중...');
-      const audioCID = await uploadToPinata(audioFile);
+      
+      // Blob 객체인 경우 File 객체로 변환
+      let audioFileToUpload = audioToUse;
+      if (audioToUse instanceof Blob && !(audioToUse instanceof File)) {
+        const filename = generatedAudioFilename || `generated_audio_${Date.now()}.wav`;
+        audioFileToUpload = new File([audioToUse], filename, { type: audioToUse.type || 'audio/wav' });
+      }
+      
+      const audioCID = await uploadToPinata(audioFileToUpload);
 
       setMintingStatus('📝 메타데이터 생성 중...');
       const metadata = {
@@ -745,18 +764,18 @@ function CreatePage() {
 
       setMintingStatus('💾 데이터베이스 저장 중...');
       await axios.post('http://localhost:8000/api/nft/save', {
-        tokenId: tokenId?.toString() || 'unknown',
         title: formData.title,
         description: formData.description,
         price: formData.price || "0.1",
         tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()) : [],
         walletAddress: account,
         imageCID: imageCID,
-        audioCID: audioCID
+        audioCID: audioCID,
+        audioFilename: generatedAudioFilename || audioFile?.name || 'unknown'
       });
 
       setMintingStatus('✅ 오디오 NFT 민팅 완료!');
-      showSuccess(`NFT가 성공적으로 민팅되었습니다! Token ID: ${tokenId}`);
+      showSuccess(`NFT가 성공적으로 민팅되었습니다!`);
 
       setTimeout(() => {
         navigate("/marketplace");
@@ -764,7 +783,34 @@ function CreatePage() {
     } catch (error) {
       console.error("NFT 민팅 오류:", error);
       setMintingStatus('❌ 민팅 실패');
-      showError(`민팅에 실패했습니다: ${error.message}`);
+      
+      // 더 구체적인 에러 메시지 제공
+      let errorMessage = "민팅에 실패했습니다.";
+      
+      if (error.response?.status === 500) {
+        // 서버 내부 오류 (주로 데이터베이스 문제)
+        if (error.response.data?.details?.includes("MongoDB")) {
+          errorMessage = "데이터베이스 연결에 문제가 있습니다. MongoDB가 실행 중인지 확인해주세요.";
+        } else if (error.response.data?.details?.includes("필수 필드")) {
+          errorMessage = "필수 정보가 누락되었습니다. 모든 필드를 입력해주세요.";
+        } else {
+          errorMessage = `서버 오류: ${error.response.data?.details || error.response.data?.error || '알 수 없는 오류'}`;
+        }
+      } else if (error.message.includes("pinata")) {
+        errorMessage = "IPFS 업로드에 실패했습니다. Pinata API 키를 확인해주세요.";
+      } else if (error.message.includes("gas")) {
+        errorMessage = "가스비 부족으로 트랜잭션이 실패했습니다.";
+      } else if (error.message.includes("network")) {
+        errorMessage = "네트워크 연결에 문제가 있습니다.";
+      } else if (error.message.includes("contract")) {
+        errorMessage = "스마트 컨트랙트 호출에 실패했습니다.";
+      } else if (error.code === "ECONNREFUSED") {
+        errorMessage = "서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인해주세요.";
+      } else {
+        errorMessage = `민팅에 실패했습니다: ${error.message}`;
+      }
+      
+      showError(errorMessage);
     } finally {
       setIsMinting(false);
     }

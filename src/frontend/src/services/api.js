@@ -182,7 +182,7 @@ class ApiService {
     },
 
     // 특정 NFT 상세 정보 조회 (토큰 ID로)
-    getById: (tokenId) => this.get(`/api/nft/voiceList/${tokenId}`),
+    getById: (id) => this.get(`/api/nft/voiceList/${id}`),
 
     // 사용자별 NFT 목록 조회
     getByUser: (walletAddress) => this.get(`/api/nft/user/${walletAddress}`),
@@ -253,7 +253,17 @@ class ApiService {
         throw new Error("음성 생성 실패");
       }
 
-      return await response.blob();
+      // 헤더에서 파일명 추출
+      const filename = response.headers.get('X-Filename');
+      const filepath = response.headers.get('X-Filepath');
+      
+      const blob = await response.blob();
+      
+      return {
+        blob,
+        filename: filename || `generated_audio_${Date.now()}.wav`,
+        filepath: filepath || null
+      };
     },
 
     // 사용자 음성 모델 상태 확인
@@ -262,14 +272,20 @@ class ApiService {
     // 파라미터 기반 음성 생성 (성별, 피치, 속도)
     generateVoice: (voiceParams) =>
       this.post("/api/tts/generate-voice", voiceParams),
+
+    // 사용자별 생성된 음성 파일 목록 조회
+    getGeneratedVoices: (userId) => 
+      this.post(`/voice-list`, { user_id: userId }, {
+        baseURL: TTS_API_BASE_URL,
+      }),
   };
 
   // 카카오페이 관련 API
   kakaopay = {
     // 결제 준비
-    ready: (data) => this.post("/api/kakaopay/ready", data),
+    ready: (data) => this.post("/api/payment/ready", data),
     // 결제 승인 및 거래 등록
-    approve: (data) => this.post("/api/kakaopay/approve", data),
+    approve: (data) => this.post("/api/payment/approve", data),
   };
 }
 

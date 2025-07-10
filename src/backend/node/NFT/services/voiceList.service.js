@@ -72,6 +72,13 @@ exports.getVoiceNFTs = async ({
                 nftData.imageUrl = `https://gateway.pinata.cloud/ipfs/${nftData.image}`;
             }
 
+            // TTS 파일 경로 추가 (audioFilename이 있는 경우)
+            if (nftData.audioFilename && nftData.audioFilename !== 'unknown') {
+                // Flask TTS 서버의 파일 경로 생성
+                nftData.ttsAudioPath = `example/results/${nftData.walletAddress}/${nftData.audioFilename}`;
+                nftData.ttsAudioUrl = `http://localhost:5000/file/${nftData.walletAddress}/${nftData.audioFilename}`;
+            }
+
             return nftData;
         });
 

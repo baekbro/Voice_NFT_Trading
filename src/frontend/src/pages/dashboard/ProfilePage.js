@@ -596,15 +596,6 @@ const ProfilePage = () => {
               </div>
             </CardContent>
           </InfoCard>
-
-          <InfoCard>
-            <CardContent style={{ padding: "1.5rem" }}>
-              <div className="info-header">
-                <span className="label">잔액</span>
-              </div>
-              <div className="info-amount">0 ETH</div>
-            </CardContent>
-          </InfoCard>
         </BlockchainInfo>
 
         <StatsGrid>
