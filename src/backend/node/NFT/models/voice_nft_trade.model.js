@@ -1,4 +1,3 @@
-// models/voice_nft_trade.model.js
 const mongoose = require('mongoose');
 
 const VoiceNFTTradeSchema = new mongoose.Schema({
@@ -24,9 +23,13 @@ const VoiceNFTTradeSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
-    image: {
+    imageCID: {
         type: String,
-        required: true,
+        required: true
+    },
+    audioCID: {
+        type: String,
+        required: true
     }
 }, {
     timestamps: true
